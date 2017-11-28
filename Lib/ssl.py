@@ -669,6 +669,10 @@ class SSLObject:
         ssl_version, secret_bits)``."""
         return self._sslobj.cipher()
 
+    def ktls_cipher(self):
+        """Return the currently aes-gcm cipher information as a dictionary."""
+        return self._sslobj.ktls_cipher()
+
     def shared_ciphers(self):
         """Return a list of ciphers shared by the client during the handshake or
         None if this is not a valid server connection.
@@ -917,6 +921,12 @@ class SSLSocket(socket):
             return None
         else:
             return self._sslobj.cipher()
+
+    def ktls_cipher(self):
+        self._checkClosed()
+        if not self._sslobj:
+            return None
+        return self._sslobj.ktls_cipher()
 
     def shared_ciphers(self):
         self._checkClosed()

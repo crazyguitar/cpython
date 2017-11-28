@@ -81,6 +81,23 @@ exit:
     return return_value;
 }
 
+PyDoc_STRVAR(_ssl__SSLSocket_ktls_cipher__doc__,
+"ktls_cipher($self, /)\n"
+"--\n"
+"\n");
+
+#define _SSL__SSLSOCKET_KTLS_CIPHER_METHODDEF      \
+    {"ktls_cipher", (PyCFunction)_ssl__SSLSocket_ktls_cipher, METH_NOARGS, _ssl__SSLSocket_ktls_cipher__doc__},
+
+static PyObject *
+_ssl__SSLSocket_ktls_cipher_impl(PySSLSocket *self);
+
+static PyObject *
+_ssl__SSLSocket_ktls_cipher(PySSLSocket *self, PyObject *Py_UNUSED(ignored))
+{
+    return _ssl__SSLSocket_ktls_cipher_impl(self);
+}
+
 PyDoc_STRVAR(_ssl__SSLSocket_shared_ciphers__doc__,
 "shared_ciphers($self, /)\n"
 "--\n"

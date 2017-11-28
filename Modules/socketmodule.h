@@ -107,6 +107,11 @@ typedef int socklen_t;
 #define SOL_ALG 279
 #endif
 
+/* Linux 4.13 */
+#ifndef SOL_TLS
+#define SOL_TLS 282
+#endif
+
 /* Linux 3.19 */
 #ifndef ALG_SET_AEAD_ASSOCLEN
 #define ALG_SET_AEAD_ASSOCLEN           4
@@ -194,6 +199,44 @@ typedef union sock_addr {
     struct sockaddr_alg alg;
 #endif
 } sock_addr_t;
+
+/* KTLS related define and struct from linux/include/uapi/linux/tls.h */
+
+#define TLS_TX    1    /* Set transmit parameters */
+
+/* Supported versions */
+#define TLS_VERSION_MINOR(ver)  ((ver) & 0xFF)
+#define TLS_VERSION_MAJOR(ver)  (((ver) >> 8) & 0xFF)
+
+#define TLS_VERSION_NUMBER(id)  ((((id##_VERSION_MAJOR) & 0xFF) << 8) |	\
+                                 ((id##_VERSION_MINOR) & 0xFF))
+
+#define TLS_1_2_VERSION_MAJOR   0x3
+#define TLS_1_2_VERSION_MINOR   0x3
+#define TLS_1_2_VERSION         TLS_VERSION_NUMBER(TLS_1_2)
+
+/* Supported ciphers */
+#define TLS_CIPHER_AES_GCM_128                          51
+#define TLS_CIPHER_AES_GCM_128_IV_SIZE                  8
+#define TLS_CIPHER_AES_GCM_128_KEY_SIZE                 16
+#define TLS_CIPHER_AES_GCM_128_SALT_SIZE                4
+#define TLS_CIPHER_AES_GCM_128_TAG_SIZE                 16
+#define TLS_CIPHER_AES_GCM_128_REC_SEQ_SIZE             8
+
+#define TLS_SET_RECORD_TYPE	1
+
+struct tls_crypto_info {
+    __u16 version;
+    __u16 cipher_type;
+};
+
+struct tls12_crypto_info_aes_gcm_128 {
+    struct tls_crypto_info info;
+    unsigned char iv[TLS_CIPHER_AES_GCM_128_IV_SIZE];
+    unsigned char key[TLS_CIPHER_AES_GCM_128_KEY_SIZE];
+    unsigned char salt[TLS_CIPHER_AES_GCM_128_SALT_SIZE];
+    unsigned char rec_seq[TLS_CIPHER_AES_GCM_128_REC_SEQ_SIZE];
+};
 
 /* The object holding a socket.  It holds some extra information,
    like the address family, which is used to decode socket address

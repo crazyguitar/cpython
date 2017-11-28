@@ -73,6 +73,8 @@ static PySocketModule_APIObject PySocketModule;
 #include "openssl/err.h"
 #include "openssl/rand.h"
 #include "openssl/bio.h"
+#include "openssl/modes.h"
+#include "openssl/aes.h"
 
 /* SSL error object */
 static PyObject *PySSLErrorObject;
@@ -325,6 +327,55 @@ static PyTypeObject PySSLContext_Type;
 static PyTypeObject PySSLSocket_Type;
 static PyTypeObject PySSLMemoryBIO_Type;
 static PyTypeObject PySSLSession_Type;
+
+/* fetch key from openssl (opaque structure) */
+#define u64 uint64_t
+#define u32 uint32_t
+#define u8 uint8_t
+typedef struct {
+    u64 hi, lo;
+} u128;
+
+typedef struct {
+	/* Following 6 names follow names in GCM specification */
+    union {
+        u64 u[2];
+        u32 d[4];
+        u8 c[16];
+        size_t t[16 / sizeof(size_t)];
+    } Yi, EKi, EK0, len, Xi, H;
+    /*
+     * Relative position of Xi, H and pre-computed Htable is used in some
+     * assembler modules, i.e. don't change the order!
+     */
+#if TABLE_BITS==8
+    u128 Htable[256];
+#else
+    u128 Htable[16];
+    void (*gmult) (u64 Xi[2], const u128 Htable[16]);
+    void (*ghash) (u64 Xi[2], const u128 Htable[16], const u8 *inp, size_t len);
+#endif
+    unsigned int mres, ares;
+    block128_f block;
+    void *key;
+} gcm128_context_alias;
+
+typedef struct {
+    union {
+        double align;
+        AES_KEY ks;
+    } ks;                       /* AES key schedule to use */
+    int key_set;                /* Set if key initialised */
+    int iv_set;                 /* Set if an iv is set */
+    gcm128_context_alias gcm;
+    unsigned char *iv;          /* Temporary IV store */
+    int ivlen;                  /* IV length */
+    int taglen;
+    int iv_gen;                 /* It is OK to generate IVs */
+    int tls_aad_len;            /* TLS AAD length */
+    ctr128_f ctr;
+} EVP_AES_GCM_CTX;
+
 
 #ifdef MS_WINDOWS
 #define _PySSL_UPDATE_ERRNO_IF(cond, sock, retcode) if (cond) { \
@@ -1669,6 +1720,80 @@ cipher_to_dict(const SSL_CIPHER *cipher)
 }
 #endif
 
+static PyObject *
+_ssl__SSLSocket_ktls_cipher_impl(PySSLSocket *self)
+{
+    unsigned long cipher_id = 0;
+    const SSL_CIPHER *cipher = NULL;
+
+    EVP_CIPHER_CTX *write_ctx  = NULL;
+    EVP_AES_GCM_CTX *write_gcm = NULL;
+
+    unsigned char *write_key  = NULL;
+    unsigned char *write_iv   = NULL;
+    unsigned char *write_salt = NULL;
+    unsigned char *write_seq  = NULL;
+
+    PyObject *byte_iv   = NULL;
+    PyObject *byte_key  = NULL;
+    PyObject *byte_salt = NULL;
+    PyObject *byte_seq  = NULL;
+
+    if (self->ssl == NULL) {
+        goto fail;
+    }
+
+    cipher = SSL_get_current_cipher(self->ssl);
+    if (!cipher) {
+        goto fail;
+    }
+
+    cipher_id = SSL_CIPHER_get_id(cipher);
+    if (cipher_id != TLS1_CK_ECDH_ECDSA_WITH_AES_128_GCM_SHA256) {
+        goto fail;
+    }
+
+    /* currently, ktls only support TLS_TX */
+    write_ctx  = self->ssl->enc_write_ctx;
+    write_gcm  = (EVP_AES_GCM_CTX *)write_ctx->cipher_data;
+    write_key  = (unsigned char*)(write_gcm->gcm.key);
+    write_iv   = write_gcm->iv + 4;
+    write_salt = write_gcm->iv;
+    write_seq  = self->ssl->s3->write_sequence;
+
+    byte_iv   = PyBytes_FromStringAndSize((const char *)write_iv, TLS_CIPHER_AES_GCM_128_IV_SIZE);
+    byte_key  = PyBytes_FromStringAndSize((const char *)write_key, TLS_CIPHER_AES_GCM_128_KEY_SIZE);
+    byte_salt = PyBytes_FromStringAndSize((const char *)write_salt, TLS_CIPHER_AES_GCM_128_SALT_SIZE);
+    byte_seq  = PyBytes_FromStringAndSize((const char *)write_seq, TLS_CIPHER_AES_GCM_128_REC_SEQ_SIZE);
+
+    if (!byte_iv || !byte_key || !byte_salt || !byte_seq) {
+        goto fail;
+    }
+
+    return Py_BuildValue(
+        "{sOsOsOsO}",
+        "iv", byte_iv,
+        "key", byte_key,
+        "salt", byte_salt,
+        "seq", byte_seq);
+
+  fail:
+    if (byte_iv) {
+        Py_DECREF(byte_iv);
+    }
+    if (byte_key) {
+        Py_DECREF(byte_key);
+    }
+    if (byte_salt) {
+        Py_DECREF(byte_salt);
+    }
+    if (byte_seq) {
+        Py_DECREF(byte_seq);
+    }
+
+    Py_RETURN_NONE;
+}
+
 /*[clinic input]
 _ssl._SSLSocket.shared_ciphers
 [clinic start generated code]*/
@@ -2552,6 +2677,7 @@ static PyMethodDef PySSLMethods[] = {
     _SSL__SSLSOCKET_PENDING_METHODDEF
     _SSL__SSLSOCKET_PEER_CERTIFICATE_METHODDEF
     _SSL__SSLSOCKET_CIPHER_METHODDEF
+    _SSL__SSLSOCKET_KTLS_CIPHER_METHODDEF
     _SSL__SSLSOCKET_SHARED_CIPHERS_METHODDEF
     _SSL__SSLSOCKET_VERSION_METHODDEF
     _SSL__SSLSOCKET_SELECTED_NPN_PROTOCOL_METHODDEF

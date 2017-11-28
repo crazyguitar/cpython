@@ -7078,6 +7078,39 @@ PyInit__socket(void)
     PyModule_AddIntMacro(m, SOL_CAN_RAW);
     PyModule_AddIntMacro(m, CAN_RAW);
 #endif
+
+    /* Ref: include/linux/socket.h */
+#ifdef  SOL_TLS
+    PyModule_AddIntMacro(m, SOL_TLS);
+#else
+    PyModule_AddIntConstant(m, "SOL_TLS", 282);
+#endif
+    /* Ref: linux/include/uapi/linux/tcp.h */
+#ifdef  TCP_ULP
+    PyModule_AddIntMacro(m, TCP_ULP);
+#else
+    PyModule_AddIntConstant(m, "TCP_ULP", 31);
+#endif
+    /* Ref: linux/include/uapi/linux/tls.h */
+#ifdef  TLS_TX
+    PyModule_AddIntMacro(m, TLS_TX);
+#else
+    PyModule_AddIntConstant(m, "TLS_TX", 1);
+#endif
+    /* Ref: linux/include/uapi/linux/tls.h */
+#ifdef  TLS_1_2_VERSION
+    PyModule_AddIntMacro(m, TLS_1_2_VERSION);
+#else
+    PyModule_AddIntConstant(m, "TLS_1_2_VERSION", 771);
+#endif
+    /* Ref: linux/include/uapi/linux/tls.h */
+#ifdef  TLS_CIPHER_AES_GCM_128
+    PyModule_AddIntMacro(m, TLS_CIPHER_AES_GCM_128);
+#else
+    PyModule_AddIntConstant(m, "TLS_CIPHER_AES_GCM_128", 51);
+#endif
+
+
 #ifdef HAVE_LINUX_CAN_H
     PyModule_AddIntMacro(m, CAN_EFF_FLAG);
     PyModule_AddIntMacro(m, CAN_RTR_FLAG);
